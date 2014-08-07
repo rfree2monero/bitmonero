@@ -202,15 +202,6 @@ int connection_basic::get_tos_flag() {
 }
 
 void connection_basic_pimpl::sleep_before_packet(size_t packet_size, int phase,  int q_len) {
-// XXX LATER XXX
-	{
-	  CRITICAL_REGION_LOCAL(	network_throttle_manager::m_lock_get_global_throttle_out );
-		network_throttle_manager::get_global_throttle_out().handle_trafic_tcp( packet_size ); // increase counter - global
-
-		//epee::critical_region_t<decltype(m_throttle_global_lock)> guard(m_throttle_global_lock); // *** critical *** 
-		//m_throttle_global.m_out.handle_trafic_tcp( packet_size ); // increase counter - global
-	}
-
 	double delay=0; // will be calculated
 	do
 	{ // rate limiting
@@ -219,18 +210,24 @@ void connection_basic_pimpl::sleep_before_packet(size_t packet_size, int phase, 
 			delay = network_throttle_manager::get_global_throttle_out().get_sleep_time_after_tick( packet_size ); // decission from global
 		}
 
-		auto rand1 = ((rand()%10000)/10000.) ;
-		auto rand2 = ((rand()%10000)/10000.) ;
-		delay = delay * ((1+rand1)/2);
-		delay *= 0.50;
+		auto rand1 = ((rand()%10000)/10000.) ; // 0 .. 1
+		auto rand2 = ((rand()%10000)/10000.) ; // 0 .. 1
+		delay = delay * ((1+rand1)/2); // 50 .. 150% // tweak TODO
+		delay *= 1.00; // tweak TODO
 
 		if (delay > 0) {
-			delay += rand2*0.1;
+			delay += rand2*0.3; // tweak TODO
 			long int ms = (long int)(delay * 1000);
 			_info_c("net/sleep", "Sleeping in " << __FUNCTION__ << " for " << ms << " ms before packet_size="<<packet_size); // XXX debug sleep
 			boost::this_thread::sleep(boost::posix_time::milliseconds( ms ) ); // TODO randomize sleeps
 		}
 	} while(delay > 0);
+
+	{
+	  CRITICAL_REGION_LOCAL(	network_throttle_manager::m_lock_get_global_throttle_out );
+		network_throttle_manager::get_global_throttle_out().handle_trafic_tcp( packet_size ); // increase counter - global
+	}
+
 }
 void connection_basic::set_start_time() {
 	CRITICAL_REGION_LOCAL(	network_throttle_manager::m_lock_get_global_throttle_out );

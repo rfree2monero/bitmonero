@@ -317,7 +317,7 @@ PRAGMA_WARNING_DISABLE_VS(4355)
 		typedef long long signed int t_safe; // my t_size to avoid any overunderflow in arithmetic
 		// TODO tripple check that arithetics can not ever over/underflow
 		const t_safe chunksize_good = 8192; // TODO config
-		const t_safe chunksize_max = std::max( (t_safe)64*1024 , chunksize_good * 2); // TODO config
+		const t_safe chunksize_max = std::max( (t_safe) 16*1024 , chunksize_good * 2); // TODO config
 
 		if (cb > chunksize_max) {
 			_mark_c("net/out/size", "=== split vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv");
@@ -348,7 +348,9 @@ PRAGMA_WARNING_DISABLE_VS(4355)
 				std::memcpy( dst, src, len); // void* memcpy( void* dest, const void* src, std::size_t count );
 
 				_dbg1_c("net/out/size", "part of " << all << ": pos="<<pos << " len="<<len);
-				bool ok = do_send( dst, len); // <======
+
+				bool ok = do_send( dst, len); // <====== *** RECURSION
+
 				all_ok = all_ok && ok;
 				if (!all_ok) {
     			LOG_PRINT("do_send() SEND was aborted in middle of big package - this is mostly harmless "
@@ -389,7 +391,6 @@ PRAGMA_WARNING_DISABLE_VS(4355)
 			auto size_now = cb;
 			_info_c("net/out/size", "do_send() NOW just queues: packet="<<size_now<<" B, is added to queue-size="<<m_send_que.size());
 			do_send_handler_delayed( ptr , size_now ); // (((H)))
-
     }
 		else
 		{ // no active operation
@@ -401,7 +402,7 @@ PRAGMA_WARNING_DISABLE_VS(4355)
       }
 
 			auto size_now = m_send_que.front().size();
-			_mark_c("net/out/size", "do_send() NOW SENSD: packet="<<size_now<<" B");
+			_mark_c("net/out/size", "do_send() NOW SENDS: packet="<<size_now<<" B");
 			do_send_handler_write( ptr , size_now ); // (((H)))
 
 			ASRT( size_now == m_send_que.front().size() );
