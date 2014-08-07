@@ -317,9 +317,10 @@ PRAGMA_WARNING_DISABLE_VS(4355)
 		typedef long long signed int t_safe; // my t_size to avoid any overunderflow in arithmetic
 		// TODO tripple check that arithetics can not ever over/underflow
 		const t_safe chunksize_good = 8192; // TODO config
-		const t_safe chunksize_max = chunksize_good * 2; // TODO config
+		const t_safe chunksize_max = std::max( (t_safe)64*1024 , chunksize_good * 2); // TODO config
 
 		if (cb > chunksize_max) {
+			_mark_c("net/out/size", "=== split vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv");
 			_mark_c("net/out/size", "do_send() will SPLIT into small chunks, from packet="<<cb<<" B");
 			t_safe all = cb; // all bytes to send 
 			t_safe pos = 0; // current sending position
@@ -329,34 +330,37 @@ PRAGMA_WARNING_DISABLE_VS(4355)
 			//         ^^^ (pos=8, len=4)    ;   
 
 			const size_t bufsize = chunksize_good; // TODO safecast
-			char* buf = new char[ bufsize ];
+			shared_ptr<char> buf( new char[bufsize] );
 
 			bool all_ok = true;
 			while (pos < all) {
-				t_safe lenall = all-pos+1; // length from here to end
-				t_safe len = std::min( chunksize_good , lenall); // take a smaller part
+				t_safe lenbig = all-pos+1; // length from here to end
+				t_safe len = std::min( chunksize_good , lenbig); // take a smaller part
 				ASRT(len<=chunksize_good);
 				// pos=8; len=4; all=10;	len=3;
 
 				ASRT(len>0); ASRT(len < std::numeric_limits<size_t>::max());   // yeap we want strong < then max size, to be sure
 				
-				void *dst = ((char*)ptr) + pos;
-				_mark("dst="<<dst<<" ptr="<<ptr<<" pos="<<pos);
-				ASRT(dst >= ptr); // not wrapped around address?
-				std::memcpy( (void*)buf, dst, len);
+				void *src = ((char*)ptr) + pos;
+				void *dst = (void*)(buf.get());
+				_mark("copy src="<<src<<" to dst="<<dst<<" from ptr="<<ptr<<" + pos="<<pos);
+				ASRT(src >= ptr); // not wrapped around address?
+				std::memcpy( dst, src, len); // void* memcpy( void* dest, const void* src, std::size_t count );
 
-				_dbg1_c("net/out/size", "part of " << lenall << ": pos="<<pos << " len="<<len);
-				bool ok = do_send( dst, len);
+				_dbg1_c("net/out/size", "part of " << all << ": pos="<<pos << " len="<<len);
+				bool ok = do_send( dst, len); // <======
 				all_ok = all_ok && ok;
 				if (!all_ok) {
     			LOG_PRINT("do_send() SEND was aborted in middle of big package - this is mostly harmless "
 						<< " (e.g. peer closed connection) but if it causes trouble tell us at #monero-dev. " << cb, LOG_LEVEL_0);
+					_mark_c("net/out/size", "=== split ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^");
 					return false; // partial failure in sending
 				}
 
 				pos = pos+len; ASRT(pos>0);
 			}
 
+			_mark_c("net/out/size", "=== split ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^");
 			return all_ok; // done - e.g. queued - all the chunks of current do_send call
 		}
 
