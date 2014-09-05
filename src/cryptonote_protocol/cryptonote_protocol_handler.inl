@@ -326,10 +326,15 @@ namespace cryptonote
     {
       ++count;
       block b;
+
+			#define DBG_STREAM_SHOW_BLOCK_B " Block b is: get_block_hash(b)=" << get_block_hash(b) << ". "
+
       if(!parse_and_validate_block_from_blob(block_entry.block, b))
       {
-        LOG_ERROR_CCONTEXT("sent wrong block: failed to parse and validate block: \r\n" 
-          << epee::string_tools::buff_to_hex_nodelimer(block_entry.block) << "\r\n dropping connection");
+        LOG_ERROR_CCONTEXT("sent wrong block: failed to parse and validate block: \r\n"
+          << epee::string_tools::buff_to_hex_nodelimer(block_entry.block)
+					<< DBG_STREAM_SHOW_BLOCK_B
+					<< "\r\n dropping connection");
         m_p2p->drop_connection(context);
         return 1;
       }      
@@ -349,7 +354,8 @@ namespace cryptonote
       auto req_it = context.m_requested_objects.find(get_block_hash(b));
       if(req_it == context.m_requested_objects.end())
       {
-        LOG_ERROR_CCONTEXT("sent wrong NOTIFY_RESPONSE_GET_OBJECTS: block with id=" << epee::string_tools::pod_to_hex(get_blob_hash(block_entry.block)) 
+        LOG_ERROR_CCONTEXT("sent wrong NOTIFY_RESPONSE_GET_OBJECTS: block with id=" << epee::string_tools::pod_to_hex(get_blob_hash(block_entry.block))
+					<< DBG_STREAM_SHOW_BLOCK_B
           << " wasn't requested, dropping connection");
         m_p2p->drop_connection(context);
         return 1;
@@ -357,7 +363,9 @@ namespace cryptonote
       if(b.tx_hashes.size() != block_entry.txs.size()) 
       {
         LOG_ERROR_CCONTEXT("sent wrong NOTIFY_RESPONSE_GET_OBJECTS: block with id=" << epee::string_tools::pod_to_hex(get_blob_hash(block_entry.block)) 
-          << ", tx_hashes.size()=" << b.tx_hashes.size() << " mismatch with block_complete_entry.m_txs.size()=" << block_entry.txs.size() << ", dropping connection");
+          << ", tx_hashes.size()=" << b.tx_hashes.size() << " mismatch with block_complete_entry.m_txs.size()=" << block_entry.txs.size()
+					<< DBG_STREAM_SHOW_BLOCK_B
+					<< "dropping connection");
         m_p2p->drop_connection(context);
         return 1;
       }
