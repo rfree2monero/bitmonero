@@ -1,3 +1,7 @@
+/// @file 
+/// @author CryptoNote
+/// @monero this file is being upgraded (e.g. documented) by Monero Team, including: rfree
+
 // Copyright (c) 2014, The Monero Project
 // 
 // All rights reserved.
@@ -59,11 +63,14 @@ namespace cryptonote
 
     t_cryptonote_protocol_handler(t_core& rcore, nodetool::i_p2p_endpoint<connection_context>* p_net_layout);
 
+		/// @bymonero Look at documentation below for the methods like handle_notify_new_block that are here mapped to protocol events
     BEGIN_INVOKE_MAP2(cryptonote_protocol_handler)
       HANDLE_NOTIFY_T2(NOTIFY_NEW_BLOCK, &cryptonote_protocol_handler::handle_notify_new_block)
       HANDLE_NOTIFY_T2(NOTIFY_NEW_TRANSACTIONS, &cryptonote_protocol_handler::handle_notify_new_transactions)
+
       HANDLE_NOTIFY_T2(NOTIFY_REQUEST_GET_OBJECTS, &cryptonote_protocol_handler::handle_request_get_objects)
       HANDLE_NOTIFY_T2(NOTIFY_RESPONSE_GET_OBJECTS, &cryptonote_protocol_handler::handle_response_get_objects)
+
       HANDLE_NOTIFY_T2(NOTIFY_REQUEST_CHAIN, &cryptonote_protocol_handler::handle_request_chain)
       HANDLE_NOTIFY_T2(NOTIFY_RESPONSE_CHAIN_ENTRY, &cryptonote_protocol_handler::handle_response_chain_entry)
     END_INVOKE_MAP2()
@@ -82,15 +89,34 @@ namespace cryptonote
     bool is_synchronized(){return m_synchronized;}
     void log_connections();
     std::list<connection_info> get_connections();
-  private:
-    //----------------- commands handlers ----------------------------------------------
-    int handle_notify_new_block(int command, NOTIFY_NEW_BLOCK::request& arg, cryptonote_connection_context& context);
-    int handle_notify_new_transactions(int command, NOTIFY_NEW_TRANSACTIONS::request& arg, cryptonote_connection_context& context);
-    int handle_request_get_objects(int command, NOTIFY_REQUEST_GET_OBJECTS::request& arg, cryptonote_connection_context& context);
-    int handle_response_get_objects(int command, NOTIFY_RESPONSE_GET_OBJECTS::request& arg, cryptonote_connection_context& context);
-    int handle_request_chain(int command, NOTIFY_REQUEST_CHAIN::request& arg, cryptonote_connection_context& context);
-    int handle_response_chain_entry(int command, NOTIFY_RESPONSE_CHAIN_ENTRY::request& arg, cryptonote_connection_context& context);
 
+  private:
+
+    //----------------- commands handlers ----------------------------------------------
+		
+		/// @bymonero Monero Project (rfree and others) add documentation here, because there was none in Crypto Note. We will improve it in time.
+
+		/// @TODO doc
+    int handle_notify_new_block(int command, NOTIFY_NEW_BLOCK::request& arg, cryptonote_connection_context& context);
+
+		/// @TODO doc
+    int handle_notify_new_transactions(int command, NOTIFY_NEW_TRANSACTIONS::request& arg, cryptonote_connection_context& context);
+
+		/// We are asked to send blocks. IN: we are told list of blocks (IDs) that he wants. OUT: we send back the blocks/tx(?) data
+		/// We should send the requested blocks
+    int handle_request_get_objects(int command, NOTIFY_REQUEST_GET_OBJECTS::request& arg, cryptonote_connection_context& context);
+
+		/// We are told the block data (e.g. that we requested before).
+		/// Effects: we should store this data.
+    int handle_response_get_objects(int command, NOTIFY_RESPONSE_GET_OBJECTS::request& arg, cryptonote_connection_context& context);
+
+		/// We are asked to send IDs(?) od blocks. IN: we are told the list of blocks that he has so far(???) OUT: the IDs of blocks(?)
+		/// Effects: we should reply.
+    int handle_request_chain(int command, NOTIFY_REQUEST_CHAIN::request& arg, cryptonote_connection_context& context);
+
+		/// We are told the block IDs that are offered by other node (in response to our question). IN: list of blocks IDs?
+		/// Effect: we can decide to ask for the blocks full data.
+    int handle_response_chain_entry(int command, NOTIFY_RESPONSE_CHAIN_ENTRY::request& arg, cryptonote_connection_context& context);
 
     //----------------- i_bc_protocol_layout ---------------------------------------
     virtual bool relay_block(NOTIFY_NEW_BLOCK::request& arg, cryptonote_connection_context& exclude_context);

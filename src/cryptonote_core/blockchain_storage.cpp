@@ -900,8 +900,9 @@ bool blockchain_storage::handle_get_objects(NOTIFY_REQUEST_GET_OBJECTS::request&
   CRITICAL_REGION_LOCAL(m_blockchain_lock);
   rsp.current_blockchain_height = get_current_blockchain_height();
   std::list<block> blocks;
-  get_blocks(arg.blocks, blocks, rsp.missed_ids);
+  get_blocks(arg.blocks, blocks, rsp.missed_ids); // get our blocks from our storage, and write them out to return them
 
+	// TODO document more:
   BOOST_FOREACH(const auto& bl, blocks)
   {
     std::list<crypto::hash> missed_tx_id;

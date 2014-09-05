@@ -236,7 +236,7 @@ namespace cryptonote
     m_core.pause_mine();
     m_core.handle_incoming_block(arg.b.block, bvc);
     m_core.resume_mine();
-    if(bvc.m_verifivation_failed)
+    if(bvc.m_verifivation_failed) // pin here / drop here the wrong block 
     {
       LOG_PRINT_CCONTEXT_L0("Block verification failed, dropping connection");
       m_p2p->drop_connection(context);
@@ -253,7 +253,7 @@ namespace cryptonote
       NOTIFY_REQUEST_CHAIN::request r = boost::value_initialized<NOTIFY_REQUEST_CHAIN::request>();
       m_core.get_short_chain_history(r.block_ids);
       LOG_PRINT_CCONTEXT_L2("-->>NOTIFY_REQUEST_CHAIN: m_block_ids.size()=" << r.block_ids.size() );
-      post_notify<NOTIFY_REQUEST_CHAIN>(r, context);
+      post_notify<NOTIFY_REQUEST_CHAIN>(r, context); /// ?? we ask for more blocks
     }
       
     return 1;
@@ -296,14 +296,16 @@ namespace cryptonote
   {
     LOG_PRINT_CCONTEXT_L2("NOTIFY_REQUEST_GET_OBJECTS");
     NOTIFY_RESPONSE_GET_OBJECTS::request rsp;
-    if(!m_core.handle_get_objects(arg, rsp, context))
-    {
+    bool ok = m_core.handle_get_objects(arg, rsp, context); // Read from our database, into rsp/arg variable, blocks data, for the blocks listed by ID in arg
+		if (!ok) {
       LOG_ERROR_CCONTEXT("failed to handle request NOTIFY_REQUEST_GET_OBJECTS, dropping connection");
       m_p2p->drop_connection(context);
     }
+
     LOG_PRINT_CCONTEXT_L2("-->>NOTIFY_RESPONSE_GET_OBJECTS: blocks.size()=" << rsp.blocks.size() << ", txs.size()=" << rsp.txs.size() 
                             << ", rsp.m_current_blockchain_height=" << rsp.current_blockchain_height << ", missed_ids.size()=" << rsp.missed_ids.size());
-    post_notify<NOTIFY_RESPONSE_GET_OBJECTS>(rsp, context);
+
+    post_notify<NOTIFY_RESPONSE_GET_OBJECTS>(rsp, context); // send back the response with our blocks/transactions(?)
     return 1;
   }
   //------------------------------------------------------------------------------------------------------------------------
@@ -327,13 +329,17 @@ namespace cryptonote
       ++count;
       block b;
 
-			#define DBG_STREAM_SHOW_BLOCK_B " Block b is: get_block_hash(b)=" << get_block_hash(b) << ". "
+         // << ", tx_hashes.size()=" << b.tx_hashes.size() << " mismatch with block_complete_entry.m_txs.size()=" << block_entry.txs.size()
+			#define DBG_STREAM_SHOW_BLOCK(block) " BLOCK( hash=" << get_block_hash(block) \
+				" tx size="<<block.tx_hashes.size() << " )"
+			#define DBG_STREAM_COMPARE_BLOCKS " OUR "<<DBG_STREAM_SHOW_BLOCK(block_entry.block)
+			// <<" -VS- THEIR "<<DBG_STREAM_SHOW_BLOCK(b)
 
       if(!parse_and_validate_block_from_blob(block_entry.block, b))
       {
         LOG_ERROR_CCONTEXT("sent wrong block: failed to parse and validate block: \r\n"
           << epee::string_tools::buff_to_hex_nodelimer(block_entry.block)
-					<< DBG_STREAM_SHOW_BLOCK_B
+					<< DBG_STREAM_COMPARE_BLOCKS
 					<< "\r\n dropping connection");
         m_p2p->drop_connection(context);
         return 1;
@@ -355,7 +361,7 @@ namespace cryptonote
       if(req_it == context.m_requested_objects.end())
       {
         LOG_ERROR_CCONTEXT("sent wrong NOTIFY_RESPONSE_GET_OBJECTS: block with id=" << epee::string_tools::pod_to_hex(get_blob_hash(block_entry.block))
-					<< DBG_STREAM_SHOW_BLOCK_B
+					<< DBG_STREAM_COMPARE_BLOCKS
           << " wasn't requested, dropping connection");
         m_p2p->drop_connection(context);
         return 1;
@@ -364,7 +370,7 @@ namespace cryptonote
       {
         LOG_ERROR_CCONTEXT("sent wrong NOTIFY_RESPONSE_GET_OBJECTS: block with id=" << epee::string_tools::pod_to_hex(get_blob_hash(block_entry.block)) 
           << ", tx_hashes.size()=" << b.tx_hashes.size() << " mismatch with block_complete_entry.m_txs.size()=" << block_entry.txs.size()
-					<< DBG_STREAM_SHOW_BLOCK_B
+					<< DBG_STREAM_COMPARE_BLOCKS
 					<< "dropping connection");
         m_p2p->drop_connection(context);
         return 1;
@@ -530,6 +536,7 @@ namespace cryptonote
     });
     return count;
   }
+
   //------------------------------------------------------------------------------------------------------------------------
   template<class t_core> 
   int t_cryptonote_protocol_handler<t_core>::handle_response_chain_entry(int command, NOTIFY_RESPONSE_CHAIN_ENTRY::request& arg, cryptonote_connection_context& context)
@@ -537,23 +544,22 @@ namespace cryptonote
     LOG_PRINT_CCONTEXT_L2("NOTIFY_RESPONSE_CHAIN_ENTRY: m_block_ids.size()=" << arg.m_block_ids.size() 
       << ", m_start_height=" << arg.start_height << ", m_total_height=" << arg.total_height);
     
-    if(!arg.m_block_ids.size())
-    {
+    if(!arg.m_block_ids.size()) { // no blocks - kick him
       LOG_ERROR_CCONTEXT("sent empty m_block_ids, dropping connection");
-      m_p2p->drop_connection(context);
+      m_p2p->drop_connection(context); 
       return 1;
     }
 
-    if(!m_core.have_block(arg.m_block_ids.front()))
-    {
+    if(!m_core.have_block(arg.m_block_ids.front())) {
       LOG_ERROR_CCONTEXT("sent m_block_ids starting from unknown id: "
                                               << epee::string_tools::pod_to_hex(arg.m_block_ids.front()) << " , dropping connection");
       m_p2p->drop_connection(context);
       return 1;
     }
-    
+
     context.m_remote_blockchain_height = arg.total_height;
-    context.m_last_response_height = arg.start_height + arg.m_block_ids.size()-1;
+    context.m_last_response_height = arg.ostart_height + arg.m_block_ids.size()-1;
+
     if(context.m_last_response_height > context.m_remote_blockchain_height)
     {
       LOG_ERROR_CCONTEXT("sent wrong NOTIFY_RESPONSE_CHAIN_ENTRY, with \r\nm_total_height=" << arg.total_height
@@ -561,6 +567,14 @@ namespace cryptonote
                                                                          << "\r\nm_block_ids.size()=" << arg.m_block_ids.size());
       m_p2p->drop_connection(context);
     }
+
+		// Work around for damaged blockchain, if some peers are offering us bad blocks then we will protect us (e.g. drop them)
+		for(const crypto::hash &offered_hash : arg.m_block_ids) { // this is the list of blocks IDs that the are offering us
+			std::string hash_str = epee::string_tools::pod_to_hex( offered_hash );
+			LOG_PRINT_CCONTEXT_GREEN("We are offered a block with hash: " << hash_str);
+//			if (hash_set == "")
+		}
+    
 
     BOOST_FOREACH(auto& bl_id, arg.m_block_ids)
     {

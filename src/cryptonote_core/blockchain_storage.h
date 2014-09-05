@@ -88,9 +88,19 @@ namespace cryptonote
     void set_checkpoints(checkpoints&& chk_pts) { m_checkpoints = chk_pts; }
 
     //bool push_new_block();
+
+		/// return (part of) the blocks that we store. 
+		/// @param start_offset starting with this block height @param limit of number of blocks to get now
+		/// @param Write the blocks here (out ref).
     bool get_blocks(uint64_t start_offset, size_t count, std::list<block>& blocks, std::list<transaction>& txs);
+
+		/// return (part of) the blocks (and transactions) that we store. 
+		/// @param start_offset starting with this block height @param limit of number of blocks to get now
+		/// @param Write the blocks here (out ref). @param Write the transactions here (out ref) 
     bool get_blocks(uint64_t start_offset, size_t count, std::list<block>& blocks);
+
     bool get_alternative_blocks(std::list<block>& blocks);
+
     size_t get_alternative_blocks_count();
     crypto::hash get_block_id_by_height(uint64_t height);
     bool get_block_by_hash(const crypto::hash &h, block &blk);
@@ -121,8 +131,16 @@ namespace cryptonote
     bool find_blockchain_supplement(const std::list<crypto::hash>& qblock_ids, NOTIFY_RESPONSE_CHAIN_ENTRY::request& resp);
     bool find_blockchain_supplement(const std::list<crypto::hash>& qblock_ids, uint64_t& starter_offset);
     bool find_blockchain_supplement(const uint64_t req_start_block, const std::list<crypto::hash>& qblock_ids, std::list<std::pair<block, std::list<transaction> > >& blocks, uint64_t& total_height, uint64_t& start_height, size_t max_count);
+
+		/// This method returns blocks (and transactions?) that are requested by listing the block IDs. 
+		/// @param (OUT) arg contains list of IDs to get and other details, and returns some changes(?)
+		/// @param (OUT) rsp returns some information
+		/// @TODO document this method more.
     bool handle_get_objects(NOTIFY_REQUEST_GET_OBJECTS::request& arg, NOTIFY_RESPONSE_GET_OBJECTS::request& rsp);
+
+		/// @deprecated this is not used, and not implemeted.
     bool handle_get_objects(const COMMAND_RPC_GET_RANDOM_OUTPUTS_FOR_AMOUNTS::request& req, COMMAND_RPC_GET_RANDOM_OUTPUTS_FOR_AMOUNTS::response& res);
+
     bool get_random_outs_for_amounts(const COMMAND_RPC_GET_RANDOM_OUTPUTS_FOR_AMOUNTS::request& req, COMMAND_RPC_GET_RANDOM_OUTPUTS_FOR_AMOUNTS::response& res);
     bool get_backward_blocks_sizes(size_t from_height, std::vector<size_t>& sz, size_t count);
     bool get_tx_outputs_gindexs(const crypto::hash& tx_id, std::vector<uint64_t>& indexs);
@@ -135,6 +153,10 @@ namespace cryptonote
     bool is_storing_blockchain(){return m_is_blockchain_storing;}
     uint64_t block_difficulty(size_t i);
 
+		/// return (part of) the blocks that we store - selected by IDs of the blocks 
+		/// @param block_ids is the list of blocks that we want to get now
+		/// @param blocks is the OUT-ref where we will return the blocks
+		/// @param missed_bs the OUT-ref where we will return the IDs of the blocks that we missed (that are requsted but we don't have them)
     template<class t_ids_container, class t_blocks_container, class t_missed_container>
     bool get_blocks(const t_ids_container& block_ids, t_blocks_container& blocks, t_missed_container& missed_bs)
     {
