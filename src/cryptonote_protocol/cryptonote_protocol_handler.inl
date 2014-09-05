@@ -329,17 +329,13 @@ namespace cryptonote
       ++count;
       block b;
 
-         // << ", tx_hashes.size()=" << b.tx_hashes.size() << " mismatch with block_complete_entry.m_txs.size()=" << block_entry.txs.size()
-			#define DBG_STREAM_SHOW_BLOCK(block) " BLOCK( hash=" << get_block_hash(block) \
-				" tx size="<<block.tx_hashes.size() << " )"
-			#define DBG_STREAM_COMPARE_BLOCKS " OUR "<<DBG_STREAM_SHOW_BLOCK(block_entry.block)
-			// <<" -VS- THEIR "<<DBG_STREAM_SHOW_BLOCK(b)
+			#define DBG_STREAM_SHOW_BLOCK_B " Block b is: get_block_hash(b)=" << get_block_hash(b) << ". "
 
       if(!parse_and_validate_block_from_blob(block_entry.block, b))
       {
         LOG_ERROR_CCONTEXT("sent wrong block: failed to parse and validate block: \r\n"
           << epee::string_tools::buff_to_hex_nodelimer(block_entry.block)
-					<< DBG_STREAM_COMPARE_BLOCKS
+					<< DBG_STREAM_SHOW_BLOCK_B
 					<< "\r\n dropping connection");
         m_p2p->drop_connection(context);
         return 1;
@@ -361,7 +357,7 @@ namespace cryptonote
       if(req_it == context.m_requested_objects.end())
       {
         LOG_ERROR_CCONTEXT("sent wrong NOTIFY_RESPONSE_GET_OBJECTS: block with id=" << epee::string_tools::pod_to_hex(get_blob_hash(block_entry.block))
-					<< DBG_STREAM_COMPARE_BLOCKS
+					<< DBG_STREAM_SHOW_BLOCK_B
           << " wasn't requested, dropping connection");
         m_p2p->drop_connection(context);
         return 1;
@@ -370,7 +366,7 @@ namespace cryptonote
       {
         LOG_ERROR_CCONTEXT("sent wrong NOTIFY_RESPONSE_GET_OBJECTS: block with id=" << epee::string_tools::pod_to_hex(get_blob_hash(block_entry.block)) 
           << ", tx_hashes.size()=" << b.tx_hashes.size() << " mismatch with block_complete_entry.m_txs.size()=" << block_entry.txs.size()
-					<< DBG_STREAM_COMPARE_BLOCKS
+					<< DBG_STREAM_SHOW_BLOCK_B
 					<< "dropping connection");
         m_p2p->drop_connection(context);
         return 1;
@@ -558,7 +554,7 @@ namespace cryptonote
     }
 
     context.m_remote_blockchain_height = arg.total_height;
-    context.m_last_response_height = arg.ostart_height + arg.m_block_ids.size()-1;
+    context.m_last_response_height = arg.start_height + arg.m_block_ids.size()-1;
 
     if(context.m_last_response_height > context.m_remote_blockchain_height)
     {
@@ -571,10 +567,18 @@ namespace cryptonote
 		// Work around for damaged blockchain, if some peers are offering us bad blocks then we will protect us (e.g. drop them)
 		for(const crypto::hash &offered_hash : arg.m_block_ids) { // this is the list of blocks IDs that the are offering us
 			std::string hash_str = epee::string_tools::pod_to_hex( offered_hash );
-			LOG_PRINT_CCONTEXT_GREEN("We are offered a block with hash: " << hash_str);
-//			if (hash_set == "")
+			LOG_PRINT_CCONTEXT_GREEN("We are offered a block with hash: " << hash_str , LOG_LEVEL_3);
+
+			bool badhash=false;
+			if (hash_str == "426d16cff04c71f8b16340b722dc4010a2dd3831c22041431f772547ba6e331a") badhash=true;
+			if (hash_str == "520d272048b48cbf0e95ae03f88082c345a7637531ab5b1ab9791e966cdd7001") badhash=true;
+
+			if (badhash) {
+				LOG_PRINT_RED_L0("Got known-bad block, hash_str=" << hash_str << ", we will drop this connection.");
+				LOG_PRINT_BLUE_L0("Got known-bad block, hash_str=" << hash_str << ", we will drop this connection.");
+				m_p2p->drop_connection(context);
+			}
 		}
-    
 
     BOOST_FOREACH(auto& bl_id, arg.m_block_ids)
     {
