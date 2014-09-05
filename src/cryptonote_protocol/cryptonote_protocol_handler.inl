@@ -575,7 +575,7 @@ namespace cryptonote
 
 			if (badhash) {
 				LOG_PRINT_RED_L0("Got known-bad block, hash_str=" << hash_str << ", we will drop this connection.");
-				LOG_PRINT_BLUE_L0("Got known-bad block, hash_str=" << hash_str << ", we will drop this connection.");
+				LOG_PRINT_GREEN("Got known-bad block, hash_str=" << hash_str << ", we will drop this connection." , LOG_LEVEL_0);
 				m_p2p->drop_connection(context);
 			}
 		}
