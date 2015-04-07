@@ -45,7 +45,7 @@ namespace epee
 
   public:
     http_server_impl_base()
-        : m_net_server()
+        : m_net_server(epee::net_utils::e_connection_type_RPC)
     {}
 
     explicit http_server_impl_base(boost::asio::io_service& external_io_service)

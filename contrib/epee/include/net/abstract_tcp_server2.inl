@@ -71,12 +71,13 @@ PRAGMA_WARNING_DISABLE_VS(4355)
 		std::atomic<long> &ref_sock_count,  // the ++/-- counter 
 		std::atomic<long> &sock_number, // the only increasing ++ number generator
 		i_connection_filter* &pfilter
+		,t_connection_type connection_type
 	)
 	: 
 		connection_basic(io_service, ref_sock_count, sock_number), 
 		m_protocol_handler(this, config, context),
 		m_pfilter( pfilter ),
-		m_connection_type(NET),
+		m_connection_type( connection_type ),
 		m_throttle_speed_in("speed_in", "throttle_speed_in"),
 		m_throttle_speed_out("speed_out", "throttle_speed_out")
   {
@@ -356,7 +357,7 @@ PRAGMA_WARNING_DISABLE_VS(4355)
 		typedef long long signed int t_safe; // my t_size to avoid any overunderflow in arithmetic
 		const t_safe chunksize_good = (t_safe)( 1024 * std::max(1.0,factor) );
         const t_safe chunksize_max = chunksize_good * 2 ;
-		const bool allow_split = (m_connection_type == RPC) ? false : true; // TODO config
+		const bool allow_split = (m_connection_type == e_connection_type_RPC) ? false : true; // do not split RPC data
 
         ASRT(! (chunksize_max<0) ); // make sure it is unsigned before removin sign with cast:
         long long unsigned int chunksize_max_unsigned = static_cast<long long unsigned int>( chunksize_max ) ;
@@ -597,42 +598,46 @@ PRAGMA_WARNING_DISABLE_VS(4355)
     }
     CATCH_ENTRY_L0("connection<t_protocol_handler>::handle_write", void());
   }
+
   //---------------------------------------------------------------------------------
   template<class t_protocol_handler>
-  void connection<t_protocol_handler>::setRPcStation()
+  void connection<t_protocol_handler>::setRpcStation()
   {
-	m_connection_type = RPC; 
-	_fact_c("net/sleepRPC", "set m_connection_type = RPC ");
+    m_connection_type = e_connection_type_RPC; 
+    _fact_c("net/sleepRPC", "set m_connection_type = RPC ");
   }
+
+
   /************************************************************************/
   /*                                                                      */
   /************************************************************************/
+
   template<class t_protocol_handler>
-  boosted_tcp_server<t_protocol_handler>::boosted_tcp_server():
+  boosted_tcp_server<t_protocol_handler>::boosted_tcp_server( t_connection_type connection_type ) :
     m_io_service_local_instance(new boost::asio::io_service()),
     io_service_(*m_io_service_local_instance.get()),
     acceptor_(io_service_),
     m_stop_signal_sent(false), m_port(0), 
 	m_sock_count(0), m_sock_number(0), m_threads_count(0), 
 	m_pfilter(NULL), m_thread_index(0),
-    new_connection_(new connection<t_protocol_handler>(io_service_, m_config, m_sock_count, m_sock_number, m_pfilter))
+		m_connection_type( connection_type ),
+    new_connection_(new connection<t_protocol_handler>(io_service_, m_config, m_sock_count, m_sock_number, m_pfilter, m_connection_type))
   {
     create_server_type_map();
     m_thread_name_prefix = "NET";
-    type = NET;
   }
 
   template<class t_protocol_handler>
-  boosted_tcp_server<t_protocol_handler>::boosted_tcp_server(boost::asio::io_service& extarnal_io_service, t_server_role s_type):
+  boosted_tcp_server<t_protocol_handler>::boosted_tcp_server(boost::asio::io_service& extarnal_io_service, t_connection_type connection_type) :
     io_service_(extarnal_io_service),
     acceptor_(io_service_),
     m_stop_signal_sent(false), m_port(0), 
 		m_sock_count(0), m_sock_number(0), m_threads_count(0), 
 		m_pfilter(NULL), m_thread_index(0),
-		type(NET),
-    new_connection_(new connection<t_protocol_handler>(io_service_, m_config, m_sock_count, m_sock_number, m_pfilter))
+		m_connection_type(connection_type),
+    new_connection_(new connection<t_protocol_handler>(io_service_, m_config, m_sock_count, m_sock_number, m_pfilter, connection_type))
   {
-  create_server_type_map();
+    create_server_type_map();
     m_thread_name_prefix = "NET";
   }
   //---------------------------------------------------------------------------------
@@ -646,9 +651,9 @@ PRAGMA_WARNING_DISABLE_VS(4355)
   template<class t_protocol_handler>
   void boosted_tcp_server<t_protocol_handler>::create_server_type_map() 
   {
-		server_type_map["NET"] = t_server_role::NET;
-		server_type_map["RPC"] = t_server_role::RPC;
-		server_type_map["P2P"] = t_server_role::P2P;
+		server_type_map["NET"] = e_connection_type_NET;
+		server_type_map["RPC"] = e_connection_type_RPC;
+		server_type_map["P2P"] = e_connection_type_P2P;
   }
   //---------------------------------------------------------------------------------
   template<class t_protocol_handler>
@@ -724,9 +729,10 @@ POP_WARNINGS
   void boosted_tcp_server<t_protocol_handler>::set_threads_prefix(const std::string& prefix_name)
   {
     m_thread_name_prefix = prefix_name;
-    type = server_type_map[m_thread_name_prefix];
-    _note("Set server type to: " << type);
-    _note("Set server type to: " << m_thread_name_prefix);
+		auto it = server_type_map.find(m_thread_name_prefix);
+		if (it==server_type_map.end()) throw std::runtime_error("Unknown prefix/server type:" + std::string(prefix_name));
+    auto connection_type = it->second; // the value of type
+    _note("Set server type to: " << connection_type << " from name: " << m_thread_name_prefix);
   }
   //---------------------------------------------------------------------------------
   template<class t_protocol_handler>
@@ -848,12 +854,12 @@ POP_WARNINGS
     TRY_ENTRY();
     if (!e)
     {
-		if (type == RPC) {
-			new_connection_->setRPcStation();
-			_note("New server for RPC connections");
+		if (m_connection_type == e_connection_type_RPC) {
+			_note_c("net/rpc", "New server for RPC connections");
+			new_connection_->setRpcStation(); // hopefully this is not needed actually
 		}
 		connection_ptr conn(std::move(new_connection_));
-      new_connection_.reset(new connection<t_protocol_handler>(io_service_, m_config, m_sock_count, m_sock_number, m_pfilter));
+      new_connection_.reset(new connection<t_protocol_handler>(io_service_, m_config, m_sock_count, m_sock_number, m_pfilter, m_connection_type));
       acceptor_.async_accept(new_connection_->socket(),
         boost::bind(&boosted_tcp_server<t_protocol_handler>::handle_accept, this,
         boost::asio::placeholders::error));
@@ -873,7 +879,7 @@ POP_WARNINGS
   {
     TRY_ENTRY();
 
-    connection_ptr new_connection_l(new connection<t_protocol_handler>(io_service_, m_config, m_sock_count, m_sock_number, m_pfilter) );
+    connection_ptr new_connection_l(new connection<t_protocol_handler>(io_service_, m_config, m_sock_count, m_sock_number, m_pfilter, m_connection_type) );
     boost::asio::ip::tcp::socket&  sock_ = new_connection_l->socket();
     
     //////////////////////////////////////////////////////////////////////////
@@ -963,7 +969,7 @@ POP_WARNINGS
   bool boosted_tcp_server<t_protocol_handler>::connect_async(const std::string& adr, const std::string& port, uint32_t conn_timeout, t_callback cb, const std::string& bind_ip)
   {
     TRY_ENTRY();    
-    connection_ptr new_connection_l(new connection<t_protocol_handler>(io_service_, m_config, m_sock_count, m_sock_number, m_pfilter) );
+    connection_ptr new_connection_l(new connection<t_protocol_handler>(io_service_, m_config, m_sock_count, m_sock_number, m_pfilter, m_connection_type) );
     boost::asio::ip::tcp::socket&  sock_ = new_connection_l->socket();
     
     //////////////////////////////////////////////////////////////////////////
